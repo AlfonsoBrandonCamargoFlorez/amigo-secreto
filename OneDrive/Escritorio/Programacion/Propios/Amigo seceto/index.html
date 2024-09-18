@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amigo Secreto</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js"></script>
+    <script src="firebase-config.js"></script>
+</head>
+<body>
+    <h1>Juego del Amigo Secreto</h1>
+    <div id="user-form">
+        <input type="email" id="email" placeholder="Ingresa tu email">
+        <button id="loginButton">Iniciar Sesión</button>
+        <button id="logoutButton" style="display:none;">Cerrar Sesión</button>
+    </div>
+    <div id="game" style="display:none;">
+        <input type="text" id="name" placeholder="Ingresa tu nombre">
+        <button id="addButton">Agregar</button>
+        <button id="drawButton">Sortea Amigo Secreto</button>
+    </div>
+    <div id="result"></div>
+
+    <script>
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        let participants = [];
+
+        document.getElementById('loginButton').addEventListener('click', () => {
+            const email = document.getElementById('email').value;
+            auth.signInWithEmailAndPassword(email, 'password123') // Cambia 'password123' por una contraseña segura
+                .then(() => {
+                    document.getElementById('user-form').style.display = 'none';
+                    document.getElementById('game').style.display = 'block';
+                    loadParticipants();
+                })
+                .catch(error => alert(error.message));
+        });
+
+        document.getElementById('logoutButton').addEventListener('click', () => {
+            auth.signOut().then(() => {
+                document.getElementById('user-form').style.display = 'block';
+                document.getElementById('game').style.display = 'none';
+            });
+        });
+
+        document.getElementById('addButton').addEventListener('click', () => {
+            const nameInput = document.getElementById('name');
+            const name = nameInput.value.trim();
+            if (name && !participants.includes(name)) {
+                participants.push(name);
+                nameInput.value = '';
+                alert(`${name} fue agregado.`);
+                saveParticipants();
+            } else {
+                alert('Ingresa un nombre válido o que no esté duplicado.');
+            }
+        });
+
+        document.getElementById('drawButton').addEventListener('click', () => {
+            if (participants.length < 2) {
+                alert('Necesitas al menos 2 participantes.');
+                return;
+            }
+
+            let results = {};
+            let availableParticipants = [...participants];
+
+            participants.forEach(participant => {
+                let selected;
+                do {
+                    selected = availableParticipants[Math.floor(Math.random() * availableParticipants.length)];
+                } while (selected === participant);
+
+                results[participant] = selected;
+                availableParticipants = availableParticipants.filter(p => p !== selected);
+            });
+
+            saveResults(results);
+            showResults();
+        });
+
+        function saveParticipants() {
+            const userId = auth.currentUser.uid;
+            db.collection('participants').doc(userId).set({ names: participants });
+        }
+
+        function loadParticipants() {
+            const userId = auth.currentUser.uid;
+            db.collection('participants').doc(userId).get().then(doc => {
+                if (doc.exists) {
+                    participants = doc.data().names;
+                }
+            });
+        }
+
+        function saveResults(results) {
+            const userId = auth.currentUser.uid;
+            db.collection('results').doc(userId).set(results);
+        }
+
+        function showResults() {
+            const userId = auth.currentUser.uid;
+            db.collection('results').doc(userId).get().then(doc => {
+                if (doc.exists) {
+                    const results = doc.data();
+                    const pairs = Object.keys(results).map(participant => {
+                        return `<div class="participant">${participant} -> ${results[participant]}</div>`;
+                    });
+                    document.getElementById('result').innerHTML = pairs.join('');
+                }
+            });
+        }
+    </script>
+</body>
+</html>
